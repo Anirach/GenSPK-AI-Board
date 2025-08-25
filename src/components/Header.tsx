@@ -1,10 +1,25 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Crown, Menu, User } from "lucide-react";
+import { Crown, Menu, User, LogOut, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SignInDialog from "./SignInDialog";
+import { useAuth } from "@/contexts/AuthContext";
+import AuthDialog from "./AuthDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Link } from "react-router-dom";
 
 const Header = () => {
   const { toast } = useToast();
+  const { isAuthenticated, user, logout } = useAuth();
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+
+  const getUserInitials = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    return user?.username?.[0]?.toUpperCase() || 'U';
+  };
+
   return (
     <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -30,21 +45,61 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-3">
-          <SignInDialog>
-            <Button variant="ghost" size="sm">
-              Sign In
-            </Button>
-          </SignInDialog>
-          <Button 
-            variant="premium" 
-            size="sm"
-            onClick={() => toast({
-              title: "Free Trial Started! 🎉",
-              description: "Welcome! Your 14-day premium trial is now active.",
-            })}
-          >
-            Start Free Trial
-          </Button>
+          {isAuthenticated ? (
+            <>
+              <Link to="/build-board">
+                <Button variant="outline" size="sm">
+                  Build Board
+                </Button>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={user?.avatar} alt={user?.username} />
+                      <AvatarFallback>{getUserInitials()}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end">
+                  <div className="flex items-center justify-start gap-2 p-2">
+                    <div className="flex flex-col space-y-1 leading-none">
+                      <p className="font-medium">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username}</p>
+                      <p className="w-[200px] truncate text-sm text-muted-foreground">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={logout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign Out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setAuthDialogOpen(true)}
+              >
+                Sign In
+              </Button>
+              <Button 
+                variant="premium" 
+                size="sm"
+                onClick={() => setAuthDialogOpen(true)}
+              >
+                Start Free Trial
+              </Button>
+            </>
+          )}
           <Button 
             variant="ghost" 
             size="icon" 
@@ -57,6 +112,12 @@ const Header = () => {
             <Menu className="h-5 w-5" />
           </Button>
         </div>
+      </div>
+      
+      <AuthDialog 
+        isOpen={authDialogOpen} 
+        onClose={() => setAuthDialogOpen(false)} 
+      />
       </div>
     </header>
   );

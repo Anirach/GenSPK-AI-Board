@@ -1,0 +1,620 @@
+import prisma from '../config/database.js';
+
+// Get all conversations for a user
+export const getConversations = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, boardId } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {
+      userId: req.user.id
+    };
+
+    if (boardId) {
+      where.boardId = boardId;
+    }
+
+    const [conversations, total] = await Promise.all([
+      prisma.conversation.findMany({
+        where,
+        skip,
+        take: parseInt(limit),
+        include: {
+          board: {
+            select: {
+              id: true,
+              name: true,
+              description: true
+            }
+          },
+          _count: {
+            select: {
+              messages: true
+            }
+          },
+          messages: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              content: true,
+              type: true,
+              createdAt: true,
+              persona: {
+                select: {
+                  id: true,
+                  name: true,
+                  avatar: true
+                }
+              }
+            }
+          }
+        },
+        orderBy: { updatedAt: 'desc' }
+      }),
+      prisma.conversation.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        conversations: conversations.map(conv => ({
+          ...conv,
+          messageCount: conv._count.messages,
+          lastMessage: conv.messages[0] || null
+        })),
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get conversations error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching conversations',
+      error: error.message
+    });
+  }
+};
+
+// Get a single conversation by ID
+export const getConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { messageLimit = 50, messageOffset = 0 } = req.query;
+
+    const conversation = await prisma.conversation.findUnique({
+      where: { id },
+      include: {
+        board: {
+          include: {
+            boardPersonas: {
+              include: {
+                persona: {
+                  select: {
+                    id: true,
+                    name: true,
+                    role: true,
+                    avatar: true,
+                    expertise: true,
+                    mindset: true,
+                    personality: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatar: true
+          }
+        },
+        messages: {
+          skip: parseInt(messageOffset),
+          take: parseInt(messageLimit),
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                firstName: true,
+                lastName: true,
+                avatar: true
+              }
+            },
+            persona: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+                avatar: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'asc' }
+        },
+        _count: {
+          select: {
+            messages: true
+          }
+        }
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Check if user has access to this conversation
+    if (conversation.userId !== req.user.id && !conversation.board.isPublic) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied to this conversation'
+      });
+    }
+
+    // Format the response
+    const formattedConversation = {
+      ...conversation,
+      board: {
+        ...conversation.board,
+        personas: conversation.board.boardPersonas.map(bp => ({
+          ...bp.persona,
+          expertise: JSON.parse(bp.persona.expertise || '[]')
+        }))
+      },
+      messageCount: conversation._count.messages
+    };
+
+    delete formattedConversation.board.boardPersonas;
+
+    res.json({
+      success: true,
+      data: { conversation: formattedConversation }
+    });
+  } catch (error) {
+    console.error('Get conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching conversation',
+      error: error.message
+    });
+  }
+};
+
+// Create a new conversation
+export const createConversation = async (req, res) => {
+  try {
+    const { title, context, boardId } = req.body;
+
+    // Check if board exists and user has access
+    const board = await prisma.board.findUnique({
+      where: { id: boardId },
+      select: {
+        id: true,
+        userId: true,
+        isPublic: true
+      }
+    });
+
+    if (!board) {
+      return res.status(404).json({
+        success: false,
+        message: 'Board not found'
+      });
+    }
+
+    if (board.userId !== req.user.id && !board.isPublic) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied to this board'
+      });
+    }
+
+    const conversation = await prisma.conversation.create({
+      data: {
+        title,
+        context: context || null,
+        userId: req.user.id,
+        boardId
+      },
+      include: {
+        board: {
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatar: true
+          }
+        }
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Conversation created successfully',
+      data: { conversation }
+    });
+  } catch (error) {
+    console.error('Create conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating conversation',
+      error: error.message
+    });
+  }
+};
+
+// Update a conversation
+export const updateConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, context } = req.body;
+
+    // Check if conversation exists and user owns it
+    const existingConversation = await prisma.conversation.findUnique({
+      where: { id },
+      select: { userId: true }
+    });
+
+    if (!existingConversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    if (existingConversation.userId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - you can only update your own conversations'
+      });
+    }
+
+    const conversation = await prisma.conversation.update({
+      where: { id },
+      data: {
+        title: title || undefined,
+        context: context !== undefined ? context : undefined
+      },
+      include: {
+        board: {
+          select: {
+            id: true,
+            name: true,
+            description: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatar: true
+          }
+        }
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Conversation updated successfully',
+      data: { conversation }
+    });
+  } catch (error) {
+    console.error('Update conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating conversation',
+      error: error.message
+    });
+  }
+};
+
+// Delete a conversation
+export const deleteConversation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if conversation exists and user owns it
+    const existingConversation = await prisma.conversation.findUnique({
+      where: { id },
+      select: { userId: true }
+    });
+
+    if (!existingConversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    if (existingConversation.userId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - you can only delete your own conversations'
+      });
+    }
+
+    await prisma.conversation.delete({
+      where: { id }
+    });
+
+    res.json({
+      success: true,
+      message: 'Conversation deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete conversation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting conversation',
+      error: error.message
+    });
+  }
+};
+
+// Add message to conversation
+export const addMessage = async (req, res) => {
+  try {
+    const { id } = req.params; // conversation id
+    const { content, type, personaId } = req.body;
+
+    // Check if conversation exists and user has access
+    const conversation = await prisma.conversation.findUnique({
+      where: { id },
+      include: {
+        board: {
+          select: {
+            userId: true,
+            isPublic: true
+          }
+        }
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Check access permissions
+    if (conversation.userId !== req.user.id && !conversation.board.isPublic) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied to this conversation'
+      });
+    }
+
+    // Validate persona exists if provided
+    if (personaId) {
+      const persona = await prisma.persona.findUnique({
+        where: { id: personaId }
+      });
+
+      if (!persona) {
+        return res.status(404).json({
+          success: false,
+          message: 'Persona not found'
+        });
+      }
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        content,
+        type: type || 'USER',
+        conversationId: id,
+        userId: type === 'USER' ? req.user.id : null,
+        personaId: type === 'PERSONA' ? personaId : null
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            avatar: true
+          }
+        },
+        persona: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+            avatar: true
+          }
+        }
+      }
+    });
+
+    // Update conversation's updatedAt timestamp
+    await prisma.conversation.update({
+      where: { id },
+      data: { updatedAt: new Date() }
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Message added successfully',
+      data: { message }
+    });
+  } catch (error) {
+    console.error('Add message error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error adding message',
+      error: error.message
+    });
+  }
+};
+
+// Get messages for a conversation
+export const getMessages = async (req, res) => {
+  try {
+    const { id } = req.params; // conversation id
+    const { limit = 50, offset = 0, before, after } = req.query;
+
+    // Check if conversation exists and user has access
+    const conversation = await prisma.conversation.findUnique({
+      where: { id },
+      include: {
+        board: {
+          select: {
+            userId: true,
+            isPublic: true
+          }
+        }
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    if (conversation.userId !== req.user.id && !conversation.board.isPublic) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied to this conversation'
+      });
+    }
+
+    // Build where clause for messages
+    const where = { conversationId: id };
+    
+    if (before) {
+      where.createdAt = { lt: new Date(before) };
+    }
+    
+    if (after) {
+      where.createdAt = { gt: new Date(after) };
+    }
+
+    const [messages, total] = await Promise.all([
+      prisma.message.findMany({
+        where,
+        skip: parseInt(offset),
+        take: parseInt(limit),
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              firstName: true,
+              lastName: true,
+              avatar: true
+            }
+          },
+          persona: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              avatar: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'asc' }
+      }),
+      prisma.message.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        messages,
+        pagination: {
+          offset: parseInt(offset),
+          limit: parseInt(limit),
+          total,
+          hasMore: parseInt(offset) + parseInt(limit) < total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get messages error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching messages',
+      error: error.message
+    });
+  }
+};
+
+// Delete a message
+export const deleteMessage = async (req, res) => {
+  try {
+    const { id, messageId } = req.params;
+
+    // Check if message exists and belongs to the conversation
+    const message = await prisma.message.findFirst({
+      where: {
+        id: messageId,
+        conversationId: id
+      },
+      include: {
+        conversation: {
+          select: { userId: true }
+        }
+      }
+    });
+
+    if (!message) {
+      return res.status(404).json({
+        success: false,
+        message: 'Message not found'
+      });
+    }
+
+    // Check if user owns the conversation
+    if (message.conversation.userId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied - you can only delete messages from your own conversations'
+      });
+    }
+
+    await prisma.message.delete({
+      where: { id: messageId }
+    });
+
+    res.json({
+      success: true,
+      message: 'Message deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete message error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting message',
+      error: error.message
+    });
+  }
+};

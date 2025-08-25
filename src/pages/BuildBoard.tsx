@@ -1,89 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Users, Brain, Star, Upload, FileText, X, Settings, Edit, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Users, Brain, Star, Upload, FileText, X, Settings, Edit, Save, Trash2, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePersonas, useCreatePersona, useUpdatePersona, useDeletePersona, usePersonaSelection } from "@/hooks/usePersonas";
+import { useCreateBoard } from "@/hooks/useBoards";
+import { Persona } from "@/lib/api";
 
-interface Persona {
-  id: string;
-  name: string;
-  role: string;
-  expertise: string[];
-  mindset: string;
-  personality: string;
-  description: string;
-}
-
-const initialPresetPersonas: Persona[] = [
-  {
-    id: "steve-jobs",
-    name: "Steve Jobs",
-    role: "Innovation Visionary",
-    expertise: ["Innovation", "Design", "Leadership"],
-    mindset: "Think different. Relentless pursuit of perfection and simplicity. Focus on user experience above all else. Challenge conventional wisdom and push boundaries.",
-    personality: "Passionate, demanding, perfectionist. Direct communication style. Inspiring and charismatic leader who motivates teams to achieve the impossible.",
-    description: "Think different. Focus on simplicity and user experience."
-  },
-  {
-    id: "warren-buffett",
-    name: "Warren Buffett",
-    role: "Investment Oracle",
-    expertise: ["Investment", "Strategy", "Long-term thinking"],
-    mindset: "Value investing principles. Patient, long-term perspective. Focus on business fundamentals over market sentiment. Continuous learning and rational decision-making.",
-    personality: "Patient, humble, folksy wisdom. Clear, simple communication. Emphasizes learning from mistakes and compound growth over time.",
-    description: "Value investing principles and business fundamentals."
-  },
-  {
-    id: "oprah-winfrey",
-    name: "Oprah Winfrey",
-    role: "Empathy Leader",
-    expertise: ["Communication", "Empathy", "Brand Building"],
-    mindset: "People-first approach. Authentic connection and vulnerability create strength. Every challenge is an opportunity for growth and learning.",
-    personality: "Warm, empathetic, inspiring. Excellent listener who makes others feel heard and valued. Motivational and encouraging communication style.",
-    description: "Connect with people and build authentic relationships."
-  },
-  {
-    id: "sun-tzu",
-    name: "Sun Tzu",
-    role: "Strategic Tactician",
-    expertise: ["Strategy", "Competition", "Tactics"],
-    mindset: "Win without fighting when possible. Know yourself and your opponent. Adaptability and flexibility are key to victory. Strategic thinking over brute force.",
-    personality: "Calculated, wise, patient. Speaks in strategic principles and metaphors. Emphasizes preparation, intelligence gathering, and tactical advantage.",
-    description: "Ancient wisdom for modern strategic challenges."
-  }
-];
+// Removed hardcoded personas - now using API data
 
 const BuildBoard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
+  const { isAuthenticated, user } = useAuth();
+  
+  // API hooks
+  const { data: personas, isLoading: personasLoading, error: personasError } = usePersonas();
+  const createPersonaMutation = useCreatePersona();
+  const updatePersonaMutation = useUpdatePersona();
+  const deletePersonaMutation = useDeletePersona();
+  const createBoardMutation = useCreateBoard();
+  
+  // Selection management
+  const { 
+    selectedPersonaIds, 
+    togglePersona, 
+    removePersona, 
+    clearSelection, 
+    isSelected, 
+    canAddMore, 
+    selectionCount 
+  } = usePersonaSelection(8);
+  
+  // Component state
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const [presetPersonas, setPresetPersonas] = useState<Persona[]>(initialPresetPersonas);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [boardName, setBoardName] = useState("");
+  const [boardDescription, setBoardDescription] = useState("");
   const [customPersona, setCustomPersona] = useState({
     name: "",
     role: "",
     expertise: "",
     mindset: "",
     personality: "",
+    description: "",
     files: [] as File[]
   });
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
-  const togglePersona = (personaId: string) => {
-    setSelectedPersonas(prev => 
-      prev.includes(personaId) 
-        ? prev.filter(id => id !== personaId)
-        : [...prev, personaId]
-    );
-  };
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated && !personasLoading) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to access the board builder",
+        variant: "destructive",
+      });
+      navigate('/');
+    }
+  }, [isAuthenticated, personasLoading, navigate, toast]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -139,31 +122,53 @@ const BuildBoard = () => {
   };
 
   const handleEditPersona = (persona: Persona) => {
+    if (persona.isPreset) {
+      toast({
+        title: "Cannot Edit",
+        description: "Preset personas cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
     setEditingPersona({ ...persona });
   };
 
   const handleSavePersona = () => {
     if (!editingPersona) return;
     
-    setPresetPersonas(prev => 
-      prev.map(p => p.id === editingPersona.id ? editingPersona : p)
-    );
-    
-    toast({
-      title: "Persona Updated",
-      description: `${editingPersona.name} has been updated successfully`,
+    updatePersonaMutation.mutate({
+      id: editingPersona.id,
+      data: {
+        name: editingPersona.name,
+        role: editingPersona.role,
+        expertise: editingPersona.expertise,
+        mindset: editingPersona.mindset,
+        personality: editingPersona.personality,
+        description: editingPersona.description,
+        avatar: editingPersona.avatar
+      }
+    }, {
+      onSuccess: () => {
+        setEditingPersona(null);
+      }
     });
-    
-    setEditingPersona(null);
   };
 
   const handleDeletePersona = (personaId: string) => {
-    setPresetPersonas(prev => prev.filter(p => p.id !== personaId));
-    setSelectedPersonas(prev => prev.filter(id => id !== personaId));
+    const persona = personas?.find(p => p.id === personaId);
+    if (persona?.isPreset) {
+      toast({
+        title: "Cannot Delete",
+        description: "Preset personas cannot be deleted",
+        variant: "destructive",
+      });
+      return;
+    }
     
-    toast({
-      title: "Persona Deleted",
-      description: "The persona has been removed from the system",
+    deletePersonaMutation.mutate(personaId, {
+      onSuccess: () => {
+        removePersona(personaId);
+      }
     });
   };
 
@@ -178,19 +183,89 @@ const BuildBoard = () => {
       return;
     }
     
-    const fileAnalysisText = uploadedFiles.length > 0 
-      ? ` (with ${uploadedFiles.length} files analyzed for decision strategies)`
-      : "";
+    const expertise = customPersona.expertise 
+      ? customPersona.expertise.split(",").map(s => s.trim()).filter(s => s.length > 0)
+      : [];
     
-    toast({
-      title: "Custom Persona Created! ✨",
-      description: `${customPersona.name} has been added to your board${fileAnalysisText}`,
+    createPersonaMutation.mutate({
+      name: customPersona.name,
+      role: customPersona.role,
+      expertise,
+      mindset: customPersona.mindset || `Expert in ${customPersona.role} with deep understanding of ${expertise.join(", ")}.`,
+      personality: customPersona.personality || "Professional, analytical, and collaborative approach to problem-solving.",
+      description: customPersona.description || `Specialized ${customPersona.role} focused on ${expertise.join(", ")}.`,
+    }, {
+      onSuccess: () => {
+        setShowCustomForm(false);
+        setCustomPersona({ name: "", role: "", expertise: "", mindset: "", personality: "", description: "", files: [] });
+        setUploadedFiles([]);
+      }
     });
-    
-    setShowCustomForm(false);
-    setCustomPersona({ name: "", role: "", expertise: "", mindset: "", personality: "", files: [] });
-    setUploadedFiles([]);
   };
+
+  const handleLaunchBoardroom = () => {
+    if (selectionCount === 0) {
+      toast({
+        title: "No Personas Selected",
+        description: "Please select at least one persona to create a board",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!boardName) {
+      toast({
+        title: "Board Name Required",
+        description: "Please provide a name for your board",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createBoardMutation.mutate({
+      name: boardName,
+      description: boardDescription,
+      isPublic: false,
+      personaIds: selectedPersonaIds
+    }, {
+      onSuccess: (board) => {
+        navigate(`/boardroom?boardId=${board.id}`);
+      }
+    });
+  };
+
+  // Show loading state
+  if (personasLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading personas...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (personasError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Error Loading Personas</CardTitle>
+            <CardDescription>
+              {personasError.message || 'Failed to load personas'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => window.location.reload()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -242,13 +317,13 @@ const BuildBoard = () => {
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                {presetPersonas.map((persona) => (
+                {personas?.map((persona) => (
                   <Card 
                     key={persona.id}
                     className={`${
                       isAdminMode ? '' : 'cursor-pointer'
                     } transition-smooth ${
-                      selectedPersonas.includes(persona.id) 
+                      isSelected(persona.id) 
                         ? 'ring-2 ring-primary shadow-glow' 
                         : 'hover:shadow-card'
                     }`}
@@ -261,10 +336,10 @@ const BuildBoard = () => {
                           <CardDescription>{persona.role}</CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
-                          {selectedPersonas.includes(persona.id) && !isAdminMode && (
+                          {isSelected(persona.id) && !isAdminMode && (
                             <Badge variant="default">Selected</Badge>
                           )}
-                          {isAdminMode && (
+                          {isAdminMode && !persona.isPreset && (
                             <div className="flex gap-1">
                               <Dialog>
                                 <DialogTrigger asChild>
@@ -376,8 +451,16 @@ const BuildBoard = () => {
                                     </div>
                                   )}
                                   <DialogFooter>
-                                    <Button onClick={handleSavePersona}>
-                                      <Save className="h-4 w-4 mr-2" />
+                                    <Button 
+                                      onClick={handleSavePersona}
+                                      disabled={updatePersonaMutation.isPending}
+                                    >
+                                      {updatePersonaMutation.isPending && (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      )}
+                                      {!updatePersonaMutation.isPending && (
+                                        <Save className="h-4 w-4 mr-2" />
+                                      )}
                                       Save changes
                                     </Button>
                                   </DialogFooter>
@@ -388,8 +471,13 @@ const BuildBoard = () => {
                                 size="sm"
                                 onClick={() => handleDeletePersona(persona.id)}
                                 className="text-destructive hover:text-destructive"
+                                disabled={deletePersonaMutation.isPending}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                {deletePersonaMutation.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
                               </Button>
                             </div>
                           )}
@@ -451,7 +539,17 @@ const BuildBoard = () => {
                         id="expertise"
                         value={customPersona.expertise}
                         onChange={(e) => setCustomPersona(prev => ({ ...prev, expertise: e.target.value }))}
-                        placeholder="e.g., Research, Innovation, Perseverance"
+                        placeholder="e.g., Research, Innovation, Perseverance (comma-separated)"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="description">Brief Description</Label>
+                      <Input
+                        id="description"
+                        value={customPersona.description}
+                        onChange={(e) => setCustomPersona(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="e.g., A brilliant scientist focused on breakthrough research"
                       />
                     </div>
 
@@ -536,11 +634,20 @@ const BuildBoard = () => {
                     </div>
 
                     <div className="flex gap-2">
-                      <Button type="submit">Add to Board</Button>
+                      <Button 
+                        type="submit" 
+                        disabled={createPersonaMutation.isPending}
+                      >
+                        {createPersonaMutation.isPending && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        Add to Board
+                      </Button>
                       <Button 
                         type="button" 
                         variant="outline"
                         onClick={() => setShowCustomForm(false)}
+                        disabled={createPersonaMutation.isPending}
                       >
                         Cancel
                       </Button>
@@ -553,23 +660,51 @@ const BuildBoard = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Board Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Board Configuration</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="boardName">Board Name</Label>
+                  <Input
+                    id="boardName"
+                    value={boardName}
+                    onChange={(e) => setBoardName(e.target.value)}
+                    placeholder="e.g., Strategic Advisory Board"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="boardDescription">Description (Optional)</Label>
+                  <Textarea
+                    id="boardDescription"
+                    value={boardDescription}
+                    onChange={(e) => setBoardDescription(e.target.value)}
+                    placeholder="Describe the purpose of this board..."
+                    rows={2}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Current Board */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  Your Board ({selectedPersonas.length}/8)
+                  Your Board ({selectionCount}/8)
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedPersonas.length === 0 ? (
+                {selectionCount === 0 ? (
                   <p className="text-muted-foreground text-sm">
                     Select personas to build your advisory board
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {selectedPersonas.map((personaId) => {
-                      const persona = presetPersonas.find(p => p.id === personaId);
+                    {selectedPersonaIds.map((personaId) => {
+                      const persona = personas?.find(p => p.id === personaId);
                       return persona ? (
                         <div key={personaId} className="flex items-center justify-between p-2 bg-muted rounded">
                           <div>
@@ -579,7 +714,7 @@ const BuildBoard = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => togglePersona(personaId)}
+                            onClick={() => removePersona(personaId)}
                           >
                             ×
                           </Button>
@@ -616,18 +751,16 @@ const BuildBoard = () => {
             </Card>
 
             {/* Action Button */}
-            {selectedPersonas.length > 0 && (
+            {selectionCount > 0 && (
               <Button 
                 className="w-full" 
                 size="lg"
-                onClick={() => {
-                  toast({
-                    title: "Boardroom Launched! 🎯",
-                    description: `Your ${selectedPersonas.length} advisors are ready to consult`,
-                  });
-                  navigate('/boardroom');
-                }}
+                onClick={handleLaunchBoardroom}
+                disabled={createBoardMutation.isPending || !boardName}
               >
+                {createBoardMutation.isPending && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 Launch Your Boardroom
               </Button>
             )}

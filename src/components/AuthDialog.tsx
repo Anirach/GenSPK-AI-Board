@@ -159,6 +159,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                     <Input
                       id="login-email"
                       type="email"
+                      autoComplete="email"
                       placeholder="Enter your email"
                       value={loginForm.email}
                       onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
@@ -175,6 +176,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                       <Input
                         id="login-password"
                         type={showPassword ? "text" : "password"}
+                        autoComplete="current-password"
                         placeholder="Enter your password"
                         value={loginForm.password}
                         onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
@@ -223,6 +225,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                       <Label htmlFor="register-firstName">First Name</Label>
                       <Input
                         id="register-firstName"
+                        autoComplete="given-name"
                         placeholder="First name"
                         value={registerForm.firstName}
                         onChange={(e) => setRegisterForm(prev => ({ ...prev, firstName: e.target.value }))}
@@ -232,6 +235,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                       <Label htmlFor="register-lastName">Last Name</Label>
                       <Input
                         id="register-lastName"
+                        autoComplete="family-name"
                         placeholder="Last name"
                         value={registerForm.lastName}
                         onChange={(e) => setRegisterForm(prev => ({ ...prev, lastName: e.target.value }))}
@@ -244,6 +248,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                     <Input
                       id="register-email"
                       type="email"
+                      autoComplete="email"
                       placeholder="Enter your email"
                       value={registerForm.email}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
@@ -258,6 +263,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                     <Label htmlFor="register-username">Username</Label>
                     <Input
                       id="register-username"
+                      autoComplete="username"
                       placeholder="Choose a username"
                       value={registerForm.username}
                       onChange={(e) => setRegisterForm(prev => ({ ...prev, username: e.target.value }))}
@@ -274,6 +280,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                       <Input
                         id="register-password"
                         type={showPassword ? "text" : "password"}
+                        autoComplete="new-password"
                         placeholder="Create a password"
                         value={registerForm.password}
                         onChange={(e) => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
@@ -304,6 +311,7 @@ export const AuthDialog: React.FC<AuthDialogProps> = ({
                       <Input
                         id="register-confirmPassword"
                         type={showConfirmPassword ? "text" : "password"}
+                        autoComplete="new-password"
                         placeholder="Confirm your password"
                         value={registerForm.confirmPassword}
                         onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}

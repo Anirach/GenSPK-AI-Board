@@ -1,3 +1,5 @@
 🚀 AI Boardroom API server is running on http://0.0.0.0:3001
 📊 Environment: development
 🔗 Frontend URL: http://localhost:5173
+prisma:info Starting a sqlite pool with 3 connections.
+prisma:query SELECT `main`.`personas`.`id`, `main`.`personas`.`name`, `main`.`personas`.`role`, `main`.`personas`.`expertise`, `main`.`personas`.`mindset`, `main`.`personas`.`personality`, `main`.`personas`.`description`, `main`.`personas`.`avatar`, `main`.`personas`.`isPreset`, `main`.`personas`.`createdAt` FROM `main`.`personas` WHERE `main`.`personas`.`isPreset` = ? ORDER BY `main`.`personas`.`name` ASC LIMIT ? OFFSET ?

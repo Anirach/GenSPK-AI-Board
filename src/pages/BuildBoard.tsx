@@ -73,6 +73,22 @@ const BuildBoard = () => {
 
   const { executiveRoles, iconicLeaders } = categorizePersonas(personas || []);
 
+  // Auto-generate board name when personas are selected
+  useEffect(() => {
+    if (selectedPersonaIds.length > 0 && personas && !boardName) {
+      const selectedPersonas = personas.filter(p => selectedPersonaIds.includes(p.id));
+      const personaNames = selectedPersonas.slice(0, 2).map(p => p.name);
+      
+      if (personaNames.length === 1) {
+        setBoardName(`${personaNames[0]} Advisory Board`);
+      } else if (personaNames.length === 2) {
+        setBoardName(`${personaNames[0]} & ${personaNames[1]} Board`);
+      } else {
+        setBoardName(`${personaNames[0]}, ${personaNames[1]} & ${selectedPersonas.length - 2} others Board`);
+      }
+    }
+  }, [selectedPersonaIds, personas, boardName]);
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isAuthenticated && !personasLoading) {
@@ -892,17 +908,24 @@ const BuildBoard = () => {
 
             {/* Action Button */}
             {selectionCount > 0 && (
-              <Button 
-                className="w-full" 
-                size="lg"
-                onClick={handleLaunchBoardroom}
-                disabled={createBoardMutation.isPending || !boardName}
-              >
-                {createBoardMutation.isPending && (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <div className="space-y-2">
+                {!boardName && (
+                  <p className="text-sm text-muted-foreground text-center">
+                    Please provide a board name to continue
+                  </p>
                 )}
-                Launch Your Boardroom
-              </Button>
+                <Button 
+                  className="w-full" 
+                  size="lg"
+                  onClick={handleLaunchBoardroom}
+                  disabled={createBoardMutation.isPending || !boardName}
+                >
+                  {createBoardMutation.isPending && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  Launch Your Boardroom
+                </Button>
+              </div>
             )}
           </div>
         </div>

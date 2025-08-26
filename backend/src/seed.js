@@ -96,6 +96,91 @@ const presetPersonas = [
     description: "Operations leader with expertise in scaling businesses, optimizing processes, and building efficient operational frameworks.",
     avatar: null,
     isPreset: true
+  },
+  // Iconic Leaders
+  {
+    name: "Steve Jobs",
+    role: "Innovation Catalyst",
+    expertise: JSON.stringify([
+      "Product Design",
+      "User Experience",
+      "Innovation Strategy"
+    ]),
+    mindset: "Ruthlessly focused on simplicity and user delight. Challenges every assumption and demands excellence in execution.",
+    personality: "Perfectionist, Visionary, Direct",
+    description: "Ruthlessly focused on simplicity and user delight. Challenges every assumption and demands excellence in execution.",
+    avatar: null,
+    isPreset: true
+  },
+  {
+    name: "Warren Buffett",
+    role: "Value Investor",
+    expertise: JSON.stringify([
+      "Investment Strategy",
+      "Business Valuation",
+      "Long-term Thinking"
+    ]),
+    mindset: "Champions long-term value creation and prudent risk management.",
+    personality: "Patient, Analytical, Folksy Wisdom",
+    description: "Champions long-term value creation and prudent risk management.",
+    avatar: null,
+    isPreset: true
+  },
+  {
+    name: "Oprah Winfrey",
+    role: "Empathy Leader",
+    expertise: JSON.stringify([
+      "Emotional Intelligence",
+      "Storytelling",
+      "Team Building"
+    ]),
+    mindset: "Focuses on human connection and authentic leadership approaches.",
+    personality: "Empathetic, Inspiring, Authentic",
+    description: "Focuses on human connection and authentic leadership approaches.",
+    avatar: null,
+    isPreset: true
+  },
+  {
+    name: "Sun Tzu",
+    role: "Strategic Warrior",
+    expertise: JSON.stringify([
+      "Strategic Planning",
+      "Competitive Analysis",
+      "Risk Assessment"
+    ]),
+    mindset: "Masters the art of strategic thinking and competitive positioning.",
+    personality: "Calculated, Patient, Wise",
+    description: "Masters the art of strategic thinking and competitive positioning.",
+    avatar: null,
+    isPreset: true
+  },
+  {
+    name: "Nelson Mandela",
+    role: "Ethical Compass",
+    expertise: JSON.stringify([
+      "Ethical Decision Making",
+      "Conflict Resolution",
+      "Moral Leadership"
+    ]),
+    mindset: "Provides guidance on moral courage and ethical leadership.",
+    personality: "Principled, Forgiving, Steadfast",
+    description: "Provides guidance on moral courage and ethical leadership.",
+    avatar: null,
+    isPreset: true
+  },
+  {
+    name: "Marie Curie",
+    role: "Research Pioneer",
+    expertise: JSON.stringify([
+      "Scientific Method",
+      "Perseverance",
+      "Breaking Barriers"
+    ]),
+    mindset: "Champions evidence-based thinking and breakthrough innovation.",
+    personality: "Curious, Determined, Rigorous",
+    description: "Champions evidence-based thinking and breakthrough innovation.",
+    avatar: null,
+    isPreset: true
   }
 ];
 

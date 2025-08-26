@@ -40,6 +40,7 @@ export const register = async (req, res) => {
         firstName: true,
         lastName: true,
         avatar: true,
+        isAdmin: true,
         createdAt: true
       }
     });
@@ -126,6 +127,7 @@ export const getProfile = async (req, res) => {
         firstName: true,
         lastName: true,
         avatar: true,
+        isAdmin: true,
         createdAt: true
       }
     });

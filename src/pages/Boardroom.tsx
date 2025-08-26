@@ -9,6 +9,7 @@ import { ArrowLeft, Send, Users, Sparkles, Brain, Target, Heart, Shield, User, U
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useBoard } from "@/hooks/useBoards";
+import { ai } from "@/lib/api";
 
 // Helper function to get icon based on role/expertise
 function getPersonaIcon(role: string) {
@@ -56,18 +57,29 @@ const Boardroom = () => {
   const { data: board, isLoading: boardLoading, error: boardError } = useBoard(boardId || "");
 
   // State for messages and UI
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      sender: "Steve Jobs",
-      avatar: "SJ",
-      content: "Welcome to your AI Boardroom! I'm here to help with innovation and product strategy.",
-      timestamp: "10:20:16 AM"
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [selectedAdvisor, setSelectedAdvisor] = useState<string | null>(null);
+  const [selectedAdvisors, setSelectedAdvisors] = useState<string[]>([]);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize welcome message when board is loaded
+  useEffect(() => {
+    if (board && board.personas && board.personas.length > 0 && messages.length === 0) {
+      const firstPersona = board.personas[0];
+      const welcomeMessage: Message = {
+        id: 1,
+        sender: firstPersona.name,
+        avatar: firstPersona.name.split(' ').map(n => n[0]).join('').toUpperCase(),
+        content: `Welcome to your AI Boardroom! I'm ${firstPersona.name}, and I'm here along with your other advisors to help with strategic guidance and insights.`,
+        timestamp: new Date().toLocaleTimeString()
+      };
+      setMessages([welcomeMessage]);
+      
+      // Initialize with all advisors selected
+      setSelectedAdvisors(board.personas.map(p => p.id));
+    }
+  }, [board, messages.length]);
 
   // Handle missing or invalid board ID
   useEffect(() => {
@@ -100,7 +112,23 @@ const Boardroom = () => {
   }, [messages]);
 
   const switchAdvisor = (personaId: string) => {
-    setSelectedAdvisor(selectedAdvisor === personaId ? null : personaId);
+    setSelectedAdvisors(prev => {
+      if (prev.includes(personaId)) {
+        return prev.filter(id => id !== personaId);
+      } else {
+        return [...prev, personaId];
+      }
+    });
+  };
+
+  const selectAllAdvisors = () => {
+    if (board?.personas) {
+      setSelectedAdvisors(board.personas.map(p => p.id));
+    }
+  };
+
+  const deselectAllAdvisors = () => {
+    setSelectedAdvisors([]);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -110,8 +138,8 @@ const Boardroom = () => {
     }
   };
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !board || isGeneratingResponse) return;
 
     const userMessage: Message = {
       id: Date.now(),
@@ -122,19 +150,53 @@ const Boardroom = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentMessage = newMessage;
     setNewMessage("");
+    setIsGeneratingResponse(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responseMessage: Message = {
-        id: Date.now() + 1,
-        sender: "AI Assistant",
-        avatar: "AI",
-        content: "Thanks for your message! I'm processing your request...",
+    try {
+      // Generate AI responses from the board personas
+      const selectedPersonaIds = selectedAdvisors.length > 0 ? selectedAdvisors : undefined;
+      
+      const response = await ai.generateResponse(board.id, {
+        message: currentMessage,
+        selectedPersonaIds
+      });
+
+      if (response.success && response.data?.responses) {
+        // Add AI responses to the chat
+        const aiMessages: Message[] = response.data.responses.map((res, index) => ({
+          id: Date.now() + index + 1,
+          sender: res.personaName,
+          avatar: res.personaName.split(' ').map(n => n[0]).join('').toUpperCase(),
+          content: res.response,
+          timestamp: new Date().toLocaleTimeString()
+        }));
+
+        setMessages(prev => [...prev, ...aiMessages]);
+      } else {
+        throw new Error(response.message || 'Failed to generate AI response');
+      }
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      toast({
+        title: "Error",
+        description: "Failed to get response from your board advisors. Please try again.",
+        variant: "destructive",
+      });
+
+      // Add fallback message
+      const fallbackMessage: Message = {
+        id: Date.now() + 999,
+        sender: "System",
+        avatar: "S",
+        content: "I apologize, but I'm having trouble connecting to your advisory board right now. Please try again in a moment.",
         timestamp: new Date().toLocaleTimeString()
       };
-      setMessages(prev => [...prev, responseMessage]);
-    }, 1000);
+      setMessages(prev => [...prev, fallbackMessage]);
+    } finally {
+      setIsGeneratingResponse(false);
+    }
   };
 
   // Show loading state
@@ -188,9 +250,29 @@ const Boardroom = () => {
         {/* Sidebar - Advisors */}
         <div className="w-80 border-r border-border bg-muted/30 p-4">
           <div className="mb-4">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
-              Your Board ({board?.personas?.length || 0})
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+                Your Board ({board?.personas?.length || 0})
+              </h3>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={selectAllAdvisors}
+                  className="text-xs h-6 px-2"
+                >
+                  All
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={deselectAllAdvisors}
+                  className="text-xs h-6 px-2"
+                >
+                  None
+                </Button>
+              </div>
+            </div>
           </div>
           
           <div className="space-y-2">
@@ -201,7 +283,7 @@ const Boardroom = () => {
                   <Card 
                     key={persona.id}
                     className={`p-3 cursor-pointer transition-all hover:shadow-md ${
-                      selectedAdvisor === persona.id 
+                      selectedAdvisors.includes(persona.id)
                         ? 'ring-2 ring-primary bg-primary/5' 
                         : 'hover:bg-card'
                     }`}
@@ -217,6 +299,9 @@ const Boardroom = () => {
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium text-sm truncate">{persona.name}</h4>
                           <IconComponent className="h-3 w-3 text-muted-foreground" />
+                          {selectedAdvisors.includes(persona.id) && (
+                            <UserCheck className="h-3 w-3 text-primary" />
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground truncate">{persona.role}</p>
                         <p className="text-xs text-muted-foreground/80 truncate">
@@ -236,10 +321,36 @@ const Boardroom = () => {
 
           <Separator className="my-4" />
           
-          <div className="text-center">
-            <Badge variant="secondary" className="text-xs">
-              Active Session
-            </Badge>
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">
+              {selectedAdvisors.length > 0 ? (
+                <div>
+                  <span className="font-medium">Selected advisors ({selectedAdvisors.length}):</span>
+                  <br />
+                  {selectedAdvisors.length <= 3 ? (
+                    selectedAdvisors.map(id => 
+                      board?.personas?.find(p => p.id === id)?.name
+                    ).join(', ')
+                  ) : (
+                    `${board?.personas?.find(p => p.id === selectedAdvisors[0])?.name || 'Unknown'} and ${selectedAdvisors.length - 1} others`
+                  )}
+                  <br />
+                  <span className="text-xs">Only selected advisors will respond</span>
+                </div>
+              ) : (
+                <div>
+                  <span className="font-medium">All advisors active</span>
+                  <br />
+                  <span>All advisors will respond to your questions</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="text-center">
+              <Badge variant="secondary" className="text-xs">
+                Active Session
+              </Badge>
+            </div>
           </div>
         </div>
 
@@ -270,20 +381,50 @@ const Boardroom = () => {
 
           {/* Input Area */}
           <div className="border-t border-border p-4">
+            {isGeneratingResponse && (
+              <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Your advisory board is thinking...</span>
+              </div>
+            )}
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {selectedAdvisors.length > 0 ? (
+                  `Asking ${selectedAdvisors.length} advisor${selectedAdvisors.length > 1 ? 's' : ''}`
+                ) : (
+                  `Asking all ${board?.personas?.length || 0} advisors`
+                )}
+              </div>
+              {selectedAdvisors.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={deselectAllAdvisors}
+                  className="text-xs h-5 px-2"
+                >
+                  Reset to All
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Input
                 placeholder="Ask your advisory board for guidance..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
+                disabled={isGeneratingResponse}
                 className="flex-1"
               />
               <Button 
                 onClick={handleSendMessage}
-                disabled={!newMessage.trim()}
+                disabled={!newMessage.trim() || isGeneratingResponse}
                 size="sm"
               >
-                <Send className="h-4 w-4" />
+                {isGeneratingResponse ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>

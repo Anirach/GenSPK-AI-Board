@@ -1,4 +1,5 @@
 import prisma from '../config/database.js';
+import openai from '../config/openai.js';
 
 // Get all conversations for a user
 export const getConversations = async (req, res) => {
@@ -614,6 +615,127 @@ export const deleteMessage = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting message',
+      error: error.message
+    });
+  }
+};
+
+// Generate AI response from board personas
+export const generateAIResponse = async (req, res) => {
+  try {
+    const { boardId } = req.params;
+    const { message, conversationId, selectedPersonaIds } = req.body;
+
+    // Verify board access
+    const board = await prisma.board.findUnique({
+      where: { id: boardId },
+      include: {
+        boardPersonas: {
+          include: {
+            persona: true
+          }
+        }
+      }
+    });
+
+    if (!board) {
+      return res.status(404).json({
+        success: false,
+        message: 'Board not found'
+      });
+    }
+
+    // Check access permissions
+    if (!board.isPublic && board.userId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied to this board'
+      });
+    }
+
+    // Get conversation context if provided
+    let conversationHistory = [];
+    if (conversationId) {
+      const messages = await prisma.message.findMany({
+        where: { conversationId },
+        include: {
+          persona: true,
+          user: true
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 10 // Last 10 messages for context
+      });
+
+      conversationHistory = messages.map(msg => ({
+        role: msg.type === 'USER' ? 'user' : 'assistant',
+        content: msg.type === 'USER' 
+          ? msg.content 
+          : `${msg.persona?.name}: ${msg.content}`
+      }));
+    }
+
+    // Filter personas to respond (either selected ones or all if none specified)
+    const personasToRespond = selectedPersonaIds && selectedPersonaIds.length > 0
+      ? board.boardPersonas.filter(bp => selectedPersonaIds.includes(bp.persona.id))
+      : board.boardPersonas.slice(0, 3); // Limit to 3 personas for performance
+
+    const responses = [];
+
+    // Generate response for each persona
+    for (const boardPersona of personasToRespond) {
+      const persona = boardPersona.persona;
+      
+      // Create persona-specific system prompt
+      const systemPrompt = `You are ${persona.name}, ${persona.role}. 
+        ${persona.description || ''}
+        
+        Your personality: ${persona.personality || persona.mindset || 'Professional and helpful'}
+        Your expertise: ${persona.expertise || persona.role}
+        
+        Respond as this persona would, staying in character. Keep responses concise (2-3 sentences) and actionable. 
+        Focus on insights relevant to your expertise area.`;
+
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...conversationHistory,
+            { role: "user", content: message }
+          ],
+          max_tokens: 200,
+          temperature: 0.7
+        });
+
+        const aiResponse = completion.choices[0]?.message?.content || "I'm thinking about your question...";
+        
+        responses.push({
+          personaId: persona.id,
+          personaName: persona.name,
+          response: aiResponse
+        });
+
+      } catch (aiError) {
+        console.error(`AI response error for ${persona.name}:`, aiError);
+        responses.push({
+          personaId: persona.id,
+          personaName: persona.name,
+          response: `As ${persona.name}, I'd be happy to help with that. Could you provide more context about your specific situation?`
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'AI responses generated successfully',
+      data: { responses }
+    });
+
+  } catch (error) {
+    console.error('Generate AI response error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error generating AI response',
       error: error.message
     });
   }

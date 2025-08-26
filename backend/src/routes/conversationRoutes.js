@@ -8,7 +8,8 @@ import {
   deleteConversation,
   addMessage,
   getMessages,
-  deleteMessage
+  deleteMessage,
+  generateAIResponse
 } from '../controllers/conversationController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -55,6 +56,24 @@ const addMessageValidation = [
     .withMessage('Persona ID must be a string')
 ];
 
+const aiResponseValidation = [
+  body('message')
+    .isLength({ min: 1, max: 5000 })
+    .withMessage('Message is required and must not exceed 5000 characters'),
+  body('conversationId')
+    .optional()
+    .isString()
+    .withMessage('Conversation ID must be a string'),
+  body('selectedPersonaIds')
+    .optional()
+    .isArray()
+    .withMessage('Selected persona IDs must be an array'),
+  body('selectedPersonaIds.*')
+    .optional()
+    .isString()
+    .withMessage('Each persona ID must be a string')
+];
+
 // Routes
 router.get('/', authenticate, getConversations);
 router.get('/:id', authenticate, getConversation);
@@ -66,5 +85,8 @@ router.delete('/:id', authenticate, deleteConversation);
 router.get('/:id/messages', authenticate, getMessages);
 router.post('/:id/messages', authenticate, addMessageValidation, validate, addMessage);
 router.delete('/:id/messages/:messageId', authenticate, deleteMessage);
+
+// AI response route
+router.post('/board/:boardId/ai-response', authenticate, aiResponseValidation, validate, generateAIResponse);
 
 export default router;

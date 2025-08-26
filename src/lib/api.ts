@@ -405,6 +405,24 @@ class ApiClient {
     });
   }
 
+  // Generate AI response
+  async generateAIResponse(boardId: string, data: {
+    message: string;
+    conversationId?: string;
+    selectedPersonaIds?: string[];
+  }) {
+    return this.request<{
+      responses: Array<{
+        personaId: string;
+        personaName: string;
+        response: string;
+      }>;
+    }>(`/conversations/board/${boardId}/ai-response`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Health check
   async healthCheck() {
     return this.request<any>('/health');
@@ -457,4 +475,9 @@ export const messages = {
     apiClient.addMessage(conversationId, data),
   delete: (conversationId: string, messageId: string) => 
     apiClient.deleteMessage(conversationId, messageId),
+};
+
+export const ai = {
+  generateResponse: (boardId: string, data: Parameters<typeof apiClient.generateAIResponse>[1]) =>
+    apiClient.generateAIResponse(boardId, data),
 };

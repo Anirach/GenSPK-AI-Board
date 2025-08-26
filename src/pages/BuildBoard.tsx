@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus, Users, Brain, Star, Upload, FileText, X, Settings, Edit, Save, Trash2, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Users, Brain, Star, Upload, FileText, X, Settings, Edit, Save, Trash2, Loader2, Info } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -43,6 +43,7 @@ const BuildBoard = () => {
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [selectedPersonaDetail, setSelectedPersonaDetail] = useState<Persona | null>(null);
   const [boardName, setBoardName] = useState("");
   const [boardDescription, setBoardDescription] = useState("");
   const [customPersona, setCustomPersona] = useState({
@@ -55,6 +56,22 @@ const BuildBoard = () => {
     files: [] as File[]
   });
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+
+  // Helper function to categorize personas
+  const categorizePersonas = (personas: Persona[]) => {
+    const executiveRoles = personas?.filter(p => 
+      p.role.includes('CEO') || p.role.includes('CTO') || p.role.includes('CFO') || 
+      p.role.includes('CMO') || p.role.includes('CPO') || p.role.includes('COO')
+    ) || [];
+    
+    const iconicLeaders = personas?.filter(p => 
+      !executiveRoles.some(exec => exec.id === p.id)
+    ) || [];
+    
+    return { executiveRoles, iconicLeaders };
+  };
+
+  const { executiveRoles, iconicLeaders } = categorizePersonas(personas || []);
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -122,10 +139,10 @@ const BuildBoard = () => {
   };
 
   const handleEditPersona = (persona: Persona) => {
-    if (persona.isPreset) {
+    if (persona.isPreset && !user?.isAdmin) {
       toast({
         title: "Cannot Edit",
-        description: "Preset personas cannot be modified",
+        description: "Only admins can modify preset personas",
         variant: "destructive",
       });
       return;
@@ -156,10 +173,10 @@ const BuildBoard = () => {
 
   const handleDeletePersona = (personaId: string) => {
     const persona = personas?.find(p => p.id === personaId);
-    if (persona?.isPreset) {
+    if (persona?.isPreset && !user?.isAdmin) {
       toast({
         title: "Cannot Delete",
-        description: "Preset personas cannot be deleted",
+        description: "Only admins can delete preset personas",
         variant: "destructive",
       });
       return;
@@ -170,6 +187,25 @@ const BuildBoard = () => {
         removePersona(personaId);
       }
     });
+  };
+
+  const handlePersonaCardClick = (persona: Persona, event: React.MouseEvent) => {
+    // Check if the click was on a button or other interactive element
+    if ((event.target as HTMLElement).closest('button, [role="button"]')) {
+      return; // Don't show details if clicking on buttons
+    }
+    
+    if (isAdminMode) {
+      return; // Don't show details in admin mode
+    }
+    
+    // Check if Shift key is held for selection
+    if (event.shiftKey) {
+      togglePersona(persona.id);
+    } else {
+      // Show persona details
+      setSelectedPersonaDetail(persona);
+    }
   };
 
   const handleCustomSubmit = (e: React.FormEvent) => {
@@ -291,12 +327,15 @@ const BuildBoard = () => {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Preset Personas */}
+            {/* Iconic Leaders Section */}
             <section>
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-semibold">Choose from Iconic Leaders</h2>
-                  <p className="text-muted-foreground">Select pre-configured personas to add to your board</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Star className="h-5 w-5 text-yellow-500" />
+                    <h2 className="text-xl font-semibold">Choose from Iconic Leaders</h2>
+                  </div>
+                  <p className="text-muted-foreground">Click to view details, Shift+click to select for your board</p>
                 </div>
                 <div className="flex gap-2">
                   <Button 
@@ -317,7 +356,7 @@ const BuildBoard = () => {
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
-                {personas?.map((persona) => (
+                {iconicLeaders?.map((persona) => (
                   <Card 
                     key={persona.id}
                     className={`${
@@ -327,19 +366,24 @@ const BuildBoard = () => {
                         ? 'ring-2 ring-primary shadow-glow' 
                         : 'hover:shadow-card'
                     }`}
-                    onClick={() => !isAdminMode && togglePersona(persona.id)}
+                    onClick={(e) => handlePersonaCardClick(persona, e)}
                   >
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
-                          <CardTitle className="text-lg">{persona.name}</CardTitle>
+                          <div className="flex items-center gap-2 mb-1">
+                            <CardTitle className="text-lg">{persona.name}</CardTitle>
+                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                              Legendary
+                            </Badge>
+                          </div>
                           <CardDescription>{persona.role}</CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
                           {isSelected(persona.id) && !isAdminMode && (
                             <Badge variant="default">Selected</Badge>
                           )}
-                          {isAdminMode && !persona.isPreset && (
+                          {isAdminMode && (!persona.isPreset || user?.isAdmin) && (
                             <div className="flex gap-1">
                               <Dialog>
                                 <DialogTrigger asChild>
@@ -488,13 +532,109 @@ const BuildBoard = () => {
                       <p className="text-sm text-muted-foreground mb-3">
                         {persona.description}
                       </p>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 mb-3">
                         {persona.expertise.map((skill) => (
                           <Badge key={skill} variant="secondary" className="text-xs">
                             {skill}
                           </Badge>
                         ))}
                       </div>
+                      {!isAdminMode && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Info className="h-3 w-3" />
+                          <span>Click for details • Shift+click to select</span>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+
+            {/* Executive Roles Section */}
+            <section>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Users className="h-5 w-5 text-blue-500" />
+                    <h2 className="text-xl font-semibold">Choose from Executive Roles</h2>
+                  </div>
+                  <p className="text-muted-foreground">Click to view details, Shift+click to select for your board</p>
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {executiveRoles?.map((persona) => (
+                  <Card 
+                    key={persona.id}
+                    className={`${
+                      isAdminMode ? '' : 'cursor-pointer'
+                    } transition-smooth ${
+                      isSelected(persona.id) 
+                        ? 'ring-2 ring-primary shadow-glow' 
+                        : 'hover:shadow-card'
+                    }`}
+                    onClick={(e) => handlePersonaCardClick(persona, e)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <CardTitle className="text-lg">{persona.name}</CardTitle>
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                              Executive
+                            </Badge>
+                          </div>
+                          <CardDescription>{persona.role}</CardDescription>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isSelected(persona.id) && !isAdminMode && (
+                            <Badge variant="default">Selected</Badge>
+                          )}
+                          {isAdminMode && (!persona.isPreset || user?.isAdmin) && (
+                            <div className="flex gap-1">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => handleEditPersona(persona)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                {/* Edit dialog content would go here */}
+                              </Dialog>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleDeletePersona(persona.id)}
+                                disabled={deletePersonaMutation.isPending}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {persona.description}
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {persona.expertise.map((skill) => (
+                          <Badge key={skill} variant="secondary" className="text-xs">
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                      {!isAdminMode && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Info className="h-3 w-3" />
+                          <span>Click for details • Shift+click to select</span>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -767,6 +907,96 @@ const BuildBoard = () => {
           </div>
         </div>
       </div>
+
+      {/* Persona Detail Modal */}
+      <Dialog open={!!selectedPersonaDetail} onOpenChange={() => setSelectedPersonaDetail(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          {selectedPersonaDetail && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center gap-3 mb-2">
+                  <DialogTitle className="text-2xl">{selectedPersonaDetail.name}</DialogTitle>
+                  <Badge variant="outline" className={`text-xs ${
+                    iconicLeaders.some(p => p.id === selectedPersonaDetail.id) 
+                      ? 'bg-yellow-50 text-yellow-700 border-yellow-200' 
+                      : 'bg-blue-50 text-blue-700 border-blue-200'
+                  }`}>
+                    {iconicLeaders.some(p => p.id === selectedPersonaDetail.id) ? 'Legendary' : 'Executive'}
+                  </Badge>
+                </div>
+                <DialogDescription className="text-lg text-foreground">
+                  {selectedPersonaDetail.role}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-6 py-4">
+                {/* Description */}
+                <div>
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                    Overview
+                  </h4>
+                  <p className="text-sm leading-relaxed">
+                    {selectedPersonaDetail.description}
+                  </p>
+                </div>
+
+                {/* Expertise */}
+                <div>
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">
+                    Areas of Expertise
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPersonaDetail.expertise.map((skill) => (
+                      <Badge key={skill} variant="secondary" className="text-xs px-3 py-1">
+                        {skill}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mindset */}
+                <div>
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                    Mindset & Approach
+                  </h4>
+                  <p className="text-sm leading-relaxed bg-muted/30 p-4 rounded-lg">
+                    {selectedPersonaDetail.mindset}
+                  </p>
+                </div>
+
+                {/* Personality */}
+                <div>
+                  <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-2">
+                    Personality Traits
+                  </h4>
+                  <p className="text-sm leading-relaxed">
+                    {selectedPersonaDetail.personality}
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setSelectedPersonaDetail(null)}
+                >
+                  Close
+                </Button>
+                <Button 
+                  onClick={() => {
+                    togglePersona(selectedPersonaDetail.id);
+                    setSelectedPersonaDetail(null);
+                  }}
+                  disabled={!canAddMore && !isSelected(selectedPersonaDetail.id)}
+                  className={isSelected(selectedPersonaDetail.id) ? 'bg-red-600 hover:bg-red-700' : ''}
+                >
+                  {isSelected(selectedPersonaDetail.id) ? 'Remove from Board' : 'Add to Board'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

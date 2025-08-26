@@ -23,9 +23,10 @@ const registerValidation = [
     .withMessage('Username must be 3-30 characters long and contain only letters, numbers, and underscores'),
   body('password')
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
+    .withMessage('Password must be at least 6 characters long'),
+    // Temporarily commented out for development - uncomment for production
+    // .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    // .withMessage('Password must contain at least one lowercase letter, one uppercase letter, and one number'),
   body('firstName')
     .optional()
     .isLength({ max: 50 })

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Crown, Menu, LogOut, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,9 +66,16 @@ const Header = () => {
                   <DropdownMenuContent className="w-56" align="end">
                     <div className="flex items-center justify-start gap-2 p-2">
                       <div className="flex flex-col space-y-1 leading-none">
-                        <p className="font-medium">
-                          {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">
+                            {user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.username}
+                          </p>
+                          {user?.isAdmin && (
+                            <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-800 border-amber-200">
+                              Admin
+                            </Badge>
+                          )}
+                        </div>
                         <p className="w-[200px] truncate text-sm text-muted-foreground">
                           {user?.email}
                         </p>

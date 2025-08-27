@@ -9,7 +9,8 @@ import {
   addMessage,
   getMessages,
   deleteMessage,
-  generateAIResponse
+  generateAIResponse,
+  generateConversationSummary
 } from '../controllers/conversationController.js';
 import { authenticate } from '../middleware/auth.js';
 import { validate } from '../middleware/validation.js';
@@ -88,5 +89,8 @@ router.delete('/:id/messages/:messageId', authenticate, deleteMessage);
 
 // AI response route
 router.post('/board/:boardId/ai-response', authenticate, aiResponseValidation, validate, generateAIResponse);
+
+// Summary route
+router.post('/:conversationId/summary', authenticate, generateConversationSummary);
 
 export default router;

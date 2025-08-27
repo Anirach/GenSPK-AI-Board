@@ -9,7 +9,8 @@ import { ArrowLeft, Send, Users, Sparkles, Brain, Target, Heart, Shield, User, U
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useBoard } from "@/hooks/useBoards";
-import { ai } from "@/lib/api";
+import { ai, conversations } from "@/lib/api";
+import ConversationSummaryDialog from "@/components/ConversationSummary";
 
 // Helper function to get icon based on role/expertise
 function getPersonaIcon(role: string) {
@@ -61,6 +62,7 @@ const Boardroom = () => {
   const [newMessage, setNewMessage] = useState("");
   const [selectedAdvisors, setSelectedAdvisors] = useState<string[]>([]);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Initialize welcome message when board is loaded
@@ -141,6 +143,24 @@ const Boardroom = () => {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !board || isGeneratingResponse) return;
 
+    // Create conversation if this is the first message
+    if (!currentConversationId && messages.length <= 1) {
+      try {
+        const conversationResponse = await conversations.create({
+          title: `Boardroom Discussion - ${new Date().toLocaleDateString()}`,
+          context: `Discussion with ${board.name} advisory board`,
+          boardId: board.id
+        });
+        
+        if (conversationResponse.success && conversationResponse.data?.conversation) {
+          setCurrentConversationId(conversationResponse.data.conversation.id);
+        }
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        // Continue without conversation ID for now
+      }
+    }
+
     const userMessage: Message = {
       id: Date.now(),
       sender: "You",
@@ -160,6 +180,7 @@ const Boardroom = () => {
       
       const response = await ai.generateResponse(board.id, {
         message: currentMessage,
+        conversationId: currentConversationId || undefined,
         selectedPersonaIds
       });
 
@@ -351,6 +372,21 @@ const Boardroom = () => {
                 Active Session
               </Badge>
             </div>
+          </div>
+
+          <Separator className="my-4" />
+          
+          {/* Summary Section */}
+          <div className="space-y-2">
+            {messages.length > 1 && (
+              <ConversationSummaryDialog
+                conversationId={currentConversationId || ""}
+                conversationTitle={board?.name ? `${board.name} Discussion` : "Boardroom Discussion"}
+                boardName={board?.name || ""}
+                messageCount={messages.length}
+                participants={board?.personas?.map(p => p.name) || []}
+              />
+            )}
           </div>
         </div>
 

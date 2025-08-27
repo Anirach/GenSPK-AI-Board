@@ -56,9 +56,21 @@ export interface Message {
   id: string;
   content: string;
   type: 'USER' | 'PERSONA' | 'SYSTEM';
+  personaId?: string;
   createdAt: string;
-  user?: User;
-  persona?: Persona;
+  updatedAt: string;
+}
+
+export interface ConversationSummary {
+  conversationId: string;
+  conversationTitle: string;
+  boardName: string;
+  date: string;
+  participants: string[];
+  messageCount: number;
+  summary: string;
+  format: 'detailed' | 'executive';
+  generatedAt: string;
 }
 
 export interface ApiResponse<T> {
@@ -423,6 +435,14 @@ class ApiClient {
     });
   }
 
+  // Generate conversation summary
+  async generateConversationSummary(conversationId: string, format: 'detailed' | 'executive' = 'detailed') {
+    return this.request<{ data: ConversationSummary }>(`/conversations/${conversationId}/summary`, {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  }
+
   // Health check
   async healthCheck() {
     return this.request<any>('/health');
@@ -480,4 +500,6 @@ export const messages = {
 export const ai = {
   generateResponse: (boardId: string, data: Parameters<typeof apiClient.generateAIResponse>[1]) =>
     apiClient.generateAIResponse(boardId, data),
+  generateSummary: (conversationId: string, format?: 'detailed' | 'executive') =>
+    apiClient.generateConversationSummary(conversationId, format),
 };

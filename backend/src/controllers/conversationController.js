@@ -1,5 +1,5 @@
 import prisma from '../config/database.js';
-import openai from '../config/openai.js';
+import getOpenAI from '../config/openai.js';
 
 // Get all conversations for a user
 export const getConversations = async (req, res) => {
@@ -696,6 +696,7 @@ export const generateAIResponse = async (req, res) => {
         Focus on insights relevant to your expertise area.`;
 
       try {
+        const openai = getOpenAI();
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
@@ -736,6 +737,140 @@ export const generateAIResponse = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error generating AI response',
+      error: error.message
+    });
+  }
+};
+
+// Generate conversation summary
+export const generateConversationSummary = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { format = 'detailed' } = req.body; // 'detailed' or 'executive'
+
+    // Verify conversation exists and user has access
+    const conversation = await prisma.conversation.findFirst({
+      where: {
+        id: conversationId,
+        userId: req.user.id
+      },
+      include: {
+        messages: {
+          orderBy: {
+            createdAt: 'asc'
+          }
+        },
+        board: {
+          include: {
+            boardPersonas: {
+              include: {
+                persona: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    if (conversation.messages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No messages found in conversation'
+      });
+    }
+
+    // Prepare conversation text for summarization
+    const personas = conversation.board.boardPersonas.map(bp => bp.persona);
+    const conversationText = conversation.messages
+      .map(message => {
+        if (message.type === 'USER') {
+          return `User: ${message.content}`;
+        } else if (message.type === 'PERSONA') {
+          const persona = personas.find(p => p.id === message.personaId);
+          return `${persona ? persona.name : 'Advisor'}: ${message.content}`;
+        }
+        return message.content;
+      })
+      .join('\n\n');
+
+    // Create summary prompt based on format
+    const summaryPrompt = format === 'executive' 
+      ? `Please provide an executive summary of this AI boardroom conversation. Focus on:
+- Key decisions made
+- Main recommendations from advisors
+- Action items identified
+- Strategic insights
+
+Keep it concise and business-focused (max 300 words).
+
+Conversation:
+${conversationText}`
+      : `Please provide a detailed summary of this AI boardroom conversation including:
+- Overview of topics discussed
+- Key insights from each advisor
+- Recommendations and strategic advice given
+- Important decisions or conclusions reached
+- Next steps or action items mentioned
+
+Conversation:
+${conversationText}`;
+
+    try {
+      const openai = getOpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { 
+            role: "system", 
+            content: "You are an expert executive assistant specializing in meeting summaries and strategic analysis. Provide clear, well-structured summaries that highlight key business insights." 
+          },
+          { role: "user", content: summaryPrompt }
+        ],
+        max_tokens: format === 'executive' ? 400 : 800,
+        temperature: 0.3
+      });
+
+      const summary = completion.choices[0]?.message?.content || "Unable to generate summary.";
+
+      // Prepare response data
+      const summaryData = {
+        conversationId: conversation.id,
+        conversationTitle: conversation.title,
+        boardName: conversation.board.name,
+        date: conversation.createdAt.toISOString().split('T')[0],
+        participants: personas.map(p => p.name),
+        messageCount: conversation.messages.length,
+        summary: summary,
+        format: format,
+        generatedAt: new Date().toISOString()
+      };
+
+      res.json({
+        success: true,
+        data: summaryData
+      });
+
+    } catch (aiError) {
+      console.error('AI summary generation error:', aiError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate AI summary',
+        error: aiError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('Generate conversation summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate conversation summary',
       error: error.message
     });
   }
